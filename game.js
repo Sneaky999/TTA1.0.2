@@ -569,8 +569,82 @@ function update(dt){
   for(const tc of traf){tc.tT-=dt;if(tc.tT<=0){tc.angle+=(Math.random()<0.5?1:-1)*Math.PI/2;tc.tT=1.5+Math.random()*3.5;}const nx=tc.x+Math.cos(tc.angle)*tc.speed*dt,ny=tc.y+Math.sin(tc.angle)*tc.speed*dt;if(!tColl(nx-tc.w/2,tc.y-tc.h/2,tc.w,tc.h))tc.x=nx;else{tc.angle+=Math.PI/2;tc.tT=0.5+Math.random()*2;}if(!tColl(tc.x-tc.w/2,ny-tc.h/2,tc.w,tc.h))tc.y=ny;else tc.angle+=Math.PI/2;tc.x=Math.max(20,Math.min(WW*T-20,tc.x));tc.y=Math.max(20,Math.min(WH*T-20,tc.y));}
 
   // NPCs wander
-  for(const n of npcs){n.timer-=dt;if(n.flee){const dx=n.x-PL.x,dy=n.y-PL.y,dd=Math.sqrt(dx*dx+dy*dy);if(dd<180){n.angle=Math.atan2(dy,dx);mvE(n,Math.cos(n.angle)*n.spd*1.4*dt,Math.sin(n.angle)*n.spd*1.4*dt);}else n.flee=false;}else{if(n.timer<=0){n.angle=Math.random()*Math.PI*2;n.timer=1.5+Math.random()*2.5;}mvE(n,Math.cos(n.angle)*n.spd*dt,Math.sin(n.angle)*n.spd*dt);}}
+  // NPCs with reactions + movement
+for (const n of npcs) {
+  n.timer -= dt;
 
+  const dx = PL.x - n.x;
+  const dy = PL.y - n.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  // 🧠 REACTIONS
+  if (n.type === "police") {
+    if (PL.wantedLevel > 0 && dist < 220) {
+      n.state = "chasing";
+    } else {
+      n.state = "idle";
+    }
+  }
+
+  else if (n.type === "civilian") {
+    if (PL.hasGun && dist < 140) {
+      n.state = "scared";
+      n.timer = 1.2;
+    } else if (n.state === "scared" && n.timer <= 0) {
+      n.state = "idle";
+    }
+  }
+
+  else if (n.type === "gangster") {
+    if (dist < 160) {
+      n.state = "angry";
+    }
+  }
+
+  // 🚶 MOVEMENT BASED ON STATE
+  if (n.state === "scared" || n.state === "fleeing") {
+    const dd = Math.sqrt((n.x-PL.x)**2 + (n.y-PL.y)**2);
+    if (dd < 200) {
+      n.angle = Math.atan2(n.y - PL.y, n.x - PL.x);
+      mvE(n,
+        Math.cos(n.angle) * n.spd * 1.6 * dt,
+        Math.sin(n.angle) * n.spd * 1.6 * dt
+      );
+      continue;
+    } else {
+      n.state = "idle";
+    }
+  }
+
+  if (n.state === "chasing") {
+    n.angle = Math.atan2(dy, dx);
+    mvE(n,
+      Math.cos(n.angle) * n.spd * 1.4 * dt,
+      Math.sin(n.angle) * n.spd * 1.4 * dt
+    );
+    continue;
+  }
+
+  if (n.state === "angry") {
+    n.angle = Math.atan2(dy, dx);
+    mvE(n,
+      Math.cos(n.angle) * n.spd * 1.1 * dt,
+      Math.sin(n.angle) * n.spd * 1.1 * dt
+    );
+    continue;
+  }
+
+  // 🚶 DEFAULT WANDER (your original system)
+  if (n.timer <= 0) {
+    n.angle = Math.random() * Math.PI * 2;
+    n.timer = 1.5 + Math.random() * 2.5;
+  }
+
+  mvE(n,
+    Math.cos(n.angle) * n.spd * dt,
+    Math.sin(n.angle) * n.spd * dt
+  );
+}
   // ── GANGSTERS – stay in turf unless provoked; fight cops first then player ──
   // gangAggroRange: how far from turf they'll chase (expands when player kills gangs)
   const gangBaseRange = 200;  // normal patrol radius from turf centre
