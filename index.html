@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>STREET CRIME</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&display=swap');
+
+/* ── TOKENS ── */
+:root {
+  --gold:     #ffc820;
+  --gold-dim: rgba(255,200,0,0.25);
+  --red:      #ff2a2a;
+  --blue:     #33aaff;
+  --green:    #3ffa6a;
+  --bg:       #050508;
+  --hud-bg:   rgba(5,5,12,0.88);
+  --border:   rgba(255,200,0,0.25);
+  --radius:   5px;
+
+  /* control sizes — overridden by media queries */
+  --btn-sm:   48px;
+  --btn-lg:   60px;
+  --joy-size: 124px;
+  --joy-knob: 48px;
+  --ctrl-h:   155px;
+  --hud-fs:   18px;
+  --label-fs: 7px;
+}
+
+/* ── RESET ── */
+*, *::before, *::after {
+  margin: 0; padding: 0;
+  box-sizing: border-box;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+body {
+  background: var(--bg);
+  overflow: hidden;
+  font-family: 'Share Tech Mono', monospace;
+  width: 100vw; height: 100vh;
+}
+#gc { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
+
+/* ═══════════════════════════════════════
+   HUD — Flexbox top bar
+   ═══════════════════════════════════════ */
+#hud {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Three-column flex bar: Health | Score | Wanted */
+#topBar {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+/* Each HUD panel */
+.hb {
+  flex: 1 1 0;            /* equal width columns */
+  min-width: 0;           /* allow shrinking */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  background: var(--hud-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 9px;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(4px);
+}
+
+/* Label row: icon + text side by side */
+.hl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--label-fs);
+  letter-spacing: 2px;
+  color: var(--gold);
+  text-transform: uppercase;
+  font-weight: 700;
+  opacity: .8;
+  white-space: nowrap;
+}
+.hl svg { flex-shrink: 0; }
+
+/* Value text */
+.hv {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: var(--hud-fs);
+  color: #fff;
+  line-height: 1.1;
+  text-shadow: 0 0 8px rgba(255,200,0,.3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Health bar */
+#hpBar {
+  width: 100%; height: 4px;
+  background: #1a0000;
+  border-radius: 2px;
+  margin: 3px 0;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+}
+#hpFill {
+  height: 100%;
+  background: linear-gradient(90deg, #c00, #ff4400);
+  border-radius: 2px;
+  transition: width .18s;
+  box-shadow: 0 0 6px #ff4400;
+}
+
+/* Wanted stars — flex row */
+#wStars {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  margin: 2px 0;
+}
+.star { display: flex; opacity: .18; transition: opacity .2s, filter .2s; }
+.star svg { width: 13px; height: 13px; fill: var(--gold); }
+.star.on {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px var(--gold));
+}
+
+/* Wanted panel: right-align */
+#hudWanted { align-items: flex-end; }
+
+/* ── Area tag & notification ── */
+#areaTag {
+  position: absolute;
+  top: 76px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 12px;
+  color: rgba(255,255,255,.38);
+  letter-spacing: 3px;
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+  text-align: center;
+}
+#notif {
+  position: absolute;
+  top: 92px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(5,5,12,0.92);
+  border: 1px solid rgba(255,200,0,.5);
+  border-radius: var(--radius);
+  padding: 5px 14px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  color: var(--gold);
+  letter-spacing: 3px;
+  z-index: 25;
+  opacity: 0;
+  transition: opacity .22s;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 0 20px rgba(255,200,0,.2);
+}
+
+/* ── Weapon HUD ── */
+#wHUD {
+  position: absolute;
+  bottom: calc(var(--ctrl-h) + 8px);
+  left: 12px;
+  z-index: 10;
+  pointer-events: none;
+}
+.ws {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(5,5,12,0.82);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px;
+  padding: 3px 8px;
+  margin-bottom: 3px;
+  opacity: 0.4;
+  transition: opacity .15s, border-color .15s, box-shadow .15s;
+}
+.ws.act {
+  border-color: var(--gold);
+  opacity: 1;
+  box-shadow: 0 0 10px rgba(255,200,0,.3), inset 0 0 8px rgba(255,200,0,.05);
+}
+.wi { display: flex; align-items: center; flex-shrink: 0; }
+.wi svg { width: 16px; height: 16px; }
+.wn {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 12px;
+  color: #fff;
+  letter-spacing: 1px;
+}
+.wa {
+  font-size: 10px;
+  color: #666;
+  margin-left: auto;
+  font-family: 'Share Tech Mono', monospace;
+}
+.wa.lo { color: #f44; animation: blink .6s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Speed box ── */
+#spdBox {
+  position: absolute;
+  bottom: calc(var(--ctrl-h) + 8px);
+  right: calc(80px + 20px);  /* minimap width + gap */
+  background: rgba(5,5,12,0.85);
+  border: 1px solid rgba(0,200,255,0.25);
+  border-radius: var(--radius);
+  padding: 4px 9px;
+  display: none;
+  z-index: 10;
+  pointer-events: none;
+  text-align: center;
+  box-shadow: 0 0 12px rgba(0,180,255,0.15);
+}
+#carNm {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: var(--blue);
+  text-transform: uppercase;
+  opacity: .7;
+}
+#spdVal {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  color: var(--blue);
+  text-shadow: 0 0 10px rgba(0,180,255,.5);
+}
+
+/* ── Minimap (circular 80 px) ── */
+#mm {
+  position: absolute;
+  bottom: calc(var(--ctrl-h) + 8px);
+  right: 12px;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold);
+  background: #000;
+  overflow: hidden;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(0,0,0,.8), 0 0 5px rgba(255,200,0,0.2);
+  cursor: pointer;
+  pointer-events: all;
+  transition: box-shadow .15s, transform .1s;
+}
+#mm:hover  { box-shadow: 0 0 14px rgba(255,200,0,0.5), 0 0 5px rgba(255,200,0,0.3); }
+#mm:active { transform: scale(0.93); }
+#mm canvas { width: 100%; height: 100%; display: block; pointer-events: none; }
+
+/* ── Full-map overlay ── */
+#fullMapOverlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.94);
+  z-index: 55;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+#fullMapOverlay.open { display: flex; }
+#fullMapHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 6px;
+  flex-shrink: 0;
+}
+#fullMapTitle {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--gold);
+  letter-spacing: 4px;
+  text-shadow: 0 0 12px rgba(255,200,0,0.35);
+}
+#fullMapCoords {
+  font-size: 9px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 2px;
+  font-family: 'Share Tech Mono', monospace;
+}
+#fullMapCloseBtn {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(60,60,60,0.9);
+  color: #ccc;
+  border: 1px solid rgba(255,255,255,0.15);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 7px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#fullMapCloseBtn:active { background: #222; transform: scale(0.94); }
+#fullMapWrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  overflow: hidden;
+  position: relative;
+}
+#fullMapCanvas {
+  border: 1px solid rgba(255,200,0,0.3);
+  border-radius: 4px;
+  box-shadow: 0 0 30px rgba(0,0,0,0.8), 0 0 12px rgba(255,200,0,0.1);
+  image-rendering: pixelated;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+/* Legend strip below the map */
+#fullMapLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 6px 16px 10px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fml {
+  display: flex; align-items: center; gap: 5px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: rgba(255,255,255,0.45);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.fml-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════
+   CONTROLS — Flex bottom bar
+   ═══════════════════════════════════════ */
+#ctrl {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: var(--ctrl-h);
+  z-index: 10;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 14px 14px;
+  pointer-events: none;
+  /* safe area bottom for notch phones */
+  padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+}
+
+/* Joystick */
+#jz {
+  width: var(--joy-size);
+  height: var(--joy-size);
+  position: relative;
+  flex-shrink: 0;
+  pointer-events: all;
+}
+#jb {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.04), rgba(255,255,255,.01));
+  border: 1.5px solid rgba(255,255,255,.12);
+}
+#jk {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: var(--joy-knob);
+  height: var(--joy-knob);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255,200,0,.95), rgba(180,90,0,.85));
+  border: 1.5px solid rgba(255,200,0,.5);
+  box-shadow: 0 0 16px rgba(255,160,0,.45), 0 2px 8px rgba(0,0,0,.5);
+}
+
+/* Action buttons panel */
+#ab {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-end;
+  pointer-events: all;
+}
+.br {
+  display: flex;
+  flex-direction: row;
+  gap: 7px;
+  align-items: center;
+}
+
+/* Generic button */
+.btn {
+  width: var(--btn-sm);
+  height: var(--btn-sm);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255,255,255,.2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .07s, opacity .07s;
+  pointer-events: all;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07);
+  backdrop-filter: blur(2px);
+}
+.btn:active { transform: scale(0.83); opacity: .65; }
+
+/* SVG inside buttons */
+.btn svg { width: 20px; height: 20px; display: block; }
+
+/* Individual button colours */
+#bA {
+  width: var(--btn-lg);
+  height: var(--btn-lg);
+  background: radial-gradient(circle at 40% 35%, #d00, #600);
+  border-color: rgba(255,60,60,.5);
+  box-shadow: 0 0 16px rgba(200,0,0,.35), 0 2px 8px rgba(0,0,0,.6);
+}
+#bA svg { width: 26px; height: 26px; }
+#bS  { background: radial-gradient(circle at 40% 35%, #062, #031); border-color: rgba(0,200,80,.3); }
+#bE  { background: radial-gradient(circle at 40% 35%, #214, #102); border-color: rgba(80,80,255,.3); }
+#bSh { background: radial-gradient(circle at 40% 35%, #530, #210); border-color: rgba(255,140,0,.35); }
+#bSw { background: radial-gradient(circle at 40% 35%, #034, #012); border-color: rgba(0,200,255,.3); }
+
+/* ═══════════════════════════════════════
+   SHOP OVERLAY
+   ═══════════════════════════════════════ */
+#shopOverlay {
+  position: absolute; inset: 0;
+  background: rgba(4,4,10,0.97);
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+#shopHeader {
+  width: 100%;
+  background: linear-gradient(180deg, rgba(20,10,0,1), rgba(10,5,0,1));
+  border-bottom: 1px solid rgba(255,140,0,.3);
+  padding: 12px 14px 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+#shopTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 24px;
+  color: #f80;
+  letter-spacing: 4px;
+  text-shadow: 0 0 16px rgba(255,140,0,.4);
+}
+#shopMoney {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255,200,0,.3);
+}
+#shopCloseBtn {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(160,0,0,.8);
+  color: #fff;
+  border: 1px solid rgba(255,60,60,.4);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 10px rgba(200,0,0,.3);
+  white-space: nowrap;
+}
+#shopCloseBtn:active { background: #600; transform: scale(.93); }
+#shopBody {
+  width: 100%; flex: 1;
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px 30px;
+}
+.sSection { margin-bottom: 14px; }
+.sSec {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px;
+  color: rgba(255,255,255,.35);
+  letter-spacing: 4px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  padding-bottom: 3px;
+  margin-bottom: 7px;
+}
+.sSec svg { flex-shrink: 0; }
+.sItem {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 4px;
+  padding: 7px 9px;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+.sIco { display: flex; align-items: center; justify-content: center; width: 24px; flex-shrink: 0; }
+.sIco svg { width: 20px; height: 20px; }
+.sInf { flex: 1; min-width: 0; }
+.sNm { font-family: 'Bebas Neue', sans-serif; font-size: 14px; color: #ddd; letter-spacing: 1px; }
+.sDsc { font-size: 9px; color: rgba(255,255,255,.3); letter-spacing: 1px; font-family: 'Share Tech Mono', monospace; }
+.sPr { font-family: 'Bebas Neue', sans-serif; font-size: 14px; color: var(--gold); margin-right: 4px; text-shadow: 0 0 6px rgba(255,200,0,.3); white-space: nowrap; }
+.sBuy {
+  background: linear-gradient(135deg, #b60, #840);
+  color: #fff;
+  border: 1px solid rgba(255,160,0,.3);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 7px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+.sBuy:active { background: #630; transform: scale(.91); }
+.sBuy:disabled { background: #222; color: #444; border-color: #333; cursor: default; }
+
+/* ═══════════════════════════════════════
+   FULL MAP OVERLAY
+   ═══════════════════════════════════════ */
+#mapOverlay {
+  position: absolute; inset: 0;
+  background: rgba(3,3,8,0.96);
+  z-index: 70;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  touch-action: auto;
+}
+#mapOverlay.open { display: flex; }
+#mapHeader {
+  width: 100%; max-width: 520px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 6px;
+  flex-shrink: 0;
+}
+#mapTitle {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px; letter-spacing: 4px;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255,200,0,0.35);
+}
+#mapCloseBtn {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(80,0,0,0.7);
+  color: #fff; border: 1px solid rgba(255,60,60,0.4);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px; letter-spacing: 2px;
+  padding: 6px 13px; border-radius: var(--radius);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+#mapCloseBtn:active { background: #600; transform: scale(.93); }
+#mapWrap {
+  position: relative;
+  flex: 1; width: 100%; max-width: 520px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 12px 12px;
+  min-height: 0;
+}
+#mapCanvas {
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 0 24px rgba(0,0,0,0.8), 0 0 6px var(--gold-dim);
+  image-rendering: pixelated;
+  /* Size set by JS to be square and fit viewport */
+  max-width: 100%; max-height: 100%;
+  touch-action: none;
+}
+#mapLegend {
+  width: 100%; max-width: 520px;
+  padding: 4px 14px 10px;
+  display: flex; flex-wrap: wrap;
+  gap: 8px 14px;
+  flex-shrink: 0;
+}
+.mleg {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 9px; letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+}
+.mleg-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mleg-sq {
+  width: 10px; height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* minimap cursor hint */
+#mm { cursor: pointer; }
+#mm:hover { box-shadow: 0 0 12px rgba(255,200,0,0.5), 0 0 5px rgba(255,200,0,0.2); }
+
+#startScreen {
+  position: absolute; inset: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  overflow: hidden;
+}
+#startScreen::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 60%, rgba(255,160,0,.06), transparent 70%),
+    radial-gradient(ellipse at 20% 80%, rgba(255,0,0,.05), transparent 50%);
+  pointer-events: none;
+}
+#startScreen h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(52px, 15vw, 84px);
+  color: var(--gold);
+  text-shadow: 0 0 40px rgba(255,200,0,.5), 0 0 80px rgba(255,100,0,.2), 3px 3px 0 #500;
+  letter-spacing: 6px;
+  margin-bottom: 4px;
+  text-align: center;
+  animation: titlePulse 3s ease-in-out infinite;
+}
+@keyframes titlePulse {
+  0%,100% { text-shadow: 0 0 40px rgba(255,200,0,.5), 3px 3px 0 #500; }
+  50%      { text-shadow: 0 0 60px rgba(255,200,0,.8), 0 0 100px rgba(255,100,0,.3), 3px 3px 0 #600; }
+}
+.sub {
+  color: rgba(255,255,255,.25);
+  font-size: 10px;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+  font-family: 'Share Tech Mono', monospace;
+}
+#startBtn {
+  background: linear-gradient(135deg, #c80, #840);
+  color: #fff;
+  border: 1px solid rgba(255,200,0,.4);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 4px;
+  padding: 13px 46px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 18px;
+  box-shadow: 0 0 24px rgba(200,120,0,.4), 0 4px 16px rgba(0,0,0,.6);
+  animation: btnGlow 2s ease-in-out infinite;
+}
+@keyframes btnGlow {
+  0%,100% { box-shadow: 0 0 20px rgba(200,120,0,.3); }
+  50%     { box-shadow: 0 0 36px rgba(255,180,0,.6); }
+}
+#startBtn:active { transform: scale(.95); }
+.inst {
+  color: rgba(255,255,255,.2);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-align: center;
+  line-height: 2.4;
+  text-transform: uppercase;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* ═══════════════════════════════════════
+   GAME OVER
+   ═══════════════════════════════════════ */
+#goScreen {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.97);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+#goScreen::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(200,0,0,.08), transparent 70%);
+  pointer-events: none;
+}
+#goScreen h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 64px;
+  color: #f00;
+  text-shadow: 0 0 30px #f00, 0 0 60px rgba(255,0,0,.3);
+  letter-spacing: 6px;
+  margin-bottom: 6px;
+  animation: wastedFlash .15s step-end 8;
+}
+@keyframes wastedFlash { 50% { opacity: 0; } }
+#goScore {
+  color: var(--gold);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  margin-bottom: 26px;
+  text-align: center;
+  line-height: 1.9;
+  text-shadow: 0 0 8px rgba(255,200,0,.3);
+}
+#reBtn {
+  background: linear-gradient(135deg, #900, #600);
+  color: #fff;
+  border: 1px solid rgba(255,60,60,.4);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 21px;
+  letter-spacing: 3px;
+  padding: 11px 40px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(200,0,0,.3);
+}
+#reBtn:active { transform: scale(.94); }
+
+/* ═══════════════════════════════════════
+   MEDIA QUERIES — mobile responsiveness
+   ═══════════════════════════════════════ */
+
+/* Very small phones (≤360px wide) */
+@media (max-width: 360px) {
+  :root {
+    --btn-sm:   42px;
+    --btn-lg:   54px;
+    --joy-size: 108px;
+    --joy-knob: 42px;
+    --ctrl-h:   140px;
+    --hud-fs:   15px;
+    --label-fs: 6px;
+  }
+  #topBar { gap: 4px; padding: 6px 7px; }
+  .hb { padding: 4px 6px; }
+  #notif, #areaTag { font-size: 12px; top: 72px; }
+}
+
+/* Small phones (361–480px) */
+@media (min-width: 361px) and (max-width: 480px) {
+  :root {
+    --btn-sm:   46px;
+    --btn-lg:   58px;
+    --joy-size: 116px;
+    --joy-knob: 46px;
+    --ctrl-h:   148px;
+    --hud-fs:   17px;
+  }
+}
+
+/* Medium phones / large phones (481–667px) — default vars fine */
+
+/* Landscape phones: shrink controls so they don't block the world */
+@media (max-height: 420px) and (orientation: landscape) {
+  :root {
+    --btn-sm:   40px;
+    --btn-lg:   50px;
+    --joy-size: 100px;
+    --joy-knob: 38px;
+    --ctrl-h:   110px;
+  }
+  #topBar { padding: 4px 8px; gap: 4px; }
+  .hb { padding: 3px 7px; }
+  #hpBar { height: 3px; }
+  #wHUD { bottom: calc(var(--ctrl-h) + 4px); }
+  #spdBox { bottom: calc(var(--ctrl-h) + 4px); }
+  #mm { bottom: calc(var(--ctrl-h) + 4px); width: 66px; height: 66px; }
+  #notif, #areaTag { top: 58px; font-size: 11px; }
+}
+
+/* Tablet / iPad (≥768px) — scale up HUD and buttons */
+@media (min-width: 768px) {
+  :root {
+    --btn-sm:   58px;
+    --btn-lg:   72px;
+    --joy-size: 140px;
+    --joy-knob: 56px;
+    --ctrl-h:   170px;
+    --hud-fs:   22px;
+    --label-fs: 8px;
+  }
+  .hb { padding: 7px 12px; }
+  #topBar { gap: 10px; padding: 10px 14px; }
+  #mm { width: 100px; height: 100px; }
+  #spdBox { right: calc(100px + 24px); }
+  #notif { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+<div id="gc">
+<canvas id="gameCanvas"></canvas>
+
+<!-- ═══════════════════════════
+     HUD
+     ═══════════════════════════ -->
+<div id="hud">
+  <div id="topBar">
+
+    <!-- Health panel -->
+    <div class="hb">
+      <div class="hl">
+        <!-- Heart icon -->
+        <svg viewBox="0 0 16 16" width="11" height="11" fill="var(--red)" aria-hidden="true">
+          <path d="M8 14s-6-4.35-6-8.5A4.5 4.5 0 0 1 8 2.86 4.5 4.5 0 0 1 14 5.5C14 9.65 8 14 8 14z"/>
+        </svg>
+        Health
+      </div>
+      <div id="hpBar"><div id="hpFill" style="width:100%"></div></div>
+      <div class="hv" id="hpV">100</div>
+    </div>
+
+    <!-- Score panel -->
+    <div class="hb" style="align-items:center;">
+      <div class="hl">
+        <!-- Trophy icon -->
+        <svg viewBox="0 0 16 16" width="11" height="11" fill="var(--gold)" aria-hidden="true">
+          <path d="M5 1h6v5a3 3 0 0 1-6 0V1zm-1 1H2v2a2 2 0 0 0 2 2V2zm8 0v4a2 2 0 0 0 2-2V2h-2zM6 10.5v1H4v1h8v-1H9.5v-1A4 4 0 0 0 12 7H4a4 4 0 0 0 2 3.5z"/>
+        </svg>
+        Score
+      </div>
+      <div class="hv" id="scV" style="text-align:center;">0</div>
+    </div>
+
+    <!-- Wanted + Cash panel -->
+    <div class="hb" id="hudWanted">
+      <div class="hl" style="justify-content:flex-end;">
+        Wanted
+        <!-- Sheriff badge icon -->
+        <svg viewBox="0 0 16 16" width="11" height="11" fill="var(--gold)" aria-hidden="true">
+          <path d="M8 1 9.5 5h4L10.5 7.5l1.5 4L8 9l-4 2.5 1.5-4L2.5 5h4z"/>
+        </svg>
+      </div>
+      <div id="wStars">
+        <span class="star on" id="s1"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1l1.5 3.5L11 5l-2.5 2.5.6 3.5L6 9.5 2.9 11l.6-3.5L1 5l3.5-.5z"/></svg></span>
+        <span class="star"    id="s2"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1l1.5 3.5L11 5l-2.5 2.5.6 3.5L6 9.5 2.9 11l.6-3.5L1 5l3.5-.5z"/></svg></span>
+        <span class="star"    id="s3"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1l1.5 3.5L11 5l-2.5 2.5.6 3.5L6 9.5 2.9 11l.6-3.5L1 5l3.5-.5z"/></svg></span>
+        <span class="star"    id="s4"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1l1.5 3.5L11 5l-2.5 2.5.6 3.5L6 9.5 2.9 11l.6-3.5L1 5l3.5-.5z"/></svg></span>
+        <span class="star"    id="s5"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1l1.5 3.5L11 5l-2.5 2.5.6 3.5L6 9.5 2.9 11l.6-3.5L1 5l3.5-.5z"/></svg></span>
+      </div>
+      <!-- Cash -->
+      <div class="hv" id="caV" style="text-align:right;">$0</div>
+    </div>
+
+  </div><!-- /topBar -->
+</div><!-- /hud -->
+
+<div id="areaTag"></div>
+<div id="wHUD"></div>
+<div id="spdBox">
+  <div id="carNm">-</div>
+  <span id="spdVal">0</span>
+  <span style="font-size:7px;color:var(--blue);letter-spacing:2px"> MPH</span>
+</div>
+<div id="mm"><canvas id="mm2" width="80" height="80"></canvas></div>
+<div id="notif"></div>
+
+<!-- ═══════════════════════════
+     FULL MAP OVERLAY
+     ═══════════════════════════ -->
+<div id="fullMapOverlay">
+  <div id="fullMapHeader">
+    <div id="fullMapTitle">
+      <!-- Map pin icon -->
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px">
+        <path d="M21 10c0 6-9 13-9 13S3 16 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      CITY MAP
+    </div>
+    <div id="fullMapCoords">TAP MAP TO CLOSE</div>
+    <button id="fullMapCloseBtn">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      CLOSE
+    </button>
+  </div>
+  <div id="fullMapWrap">
+    <canvas id="fullMapCanvas"></canvas>
+  </div>
+  <div id="fullMapLegend">
+    <div class="fml"><div class="fml-dot" style="background:#666"></div>Road</div>
+    <div class="fml"><div class="fml-dot" style="background:#2a5a1a"></div>Park</div>
+    <div class="fml"><div class="fml-dot" style="background:#1a3a6a"></div>Water</div>
+    <div class="fml"><div class="fml-dot" style="background:#0a3a0a"></div>Hospital</div>
+    <div class="fml"><div class="fml-dot" style="background:#3a0a0a"></div>Gang Turf</div>
+    <div class="fml"><div class="fml-dot" style="background:#0a0a3a"></div>Cop HQ</div>
+    <div class="fml"><div class="fml-dot" style="background:#3a1800"></div>Shop</div>
+    <div class="fml"><div class="fml-dot" style="background:#f80;border-radius:50%"></div>You</div>
+    <div class="fml"><div class="fml-dot" style="background:#f44;border-radius:50%"></div>Gangsters</div>
+    <div class="fml"><div class="fml-dot" style="background:#4af;border-radius:50%"></div>Police</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     FULL MAP OVERLAY
+     ═══════════════════════════ -->
+<div id="mapOverlay">
+  <div id="mapHeader">
+    <div id="mapTitle">
+      <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="var(--gold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px">
+        <path d="M1 4l6-2 6 4 6-2v14l-6 2-6-4-6 2z"/><path d="M7 2v14M13 6v14"/>
+      </svg>
+      CITY MAP
+    </div>
+    <button id="mapCloseBtn">
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>
+      CLOSE
+    </button>
+  </div>
+  <div id="mapWrap">
+    <canvas id="mapCanvas"></canvas>
+  </div>
+  <div id="mapLegend">
+    <div class="mleg"><div class="mleg-dot" style="background:#f80"></div>YOU</div>
+    <div class="mleg"><div class="mleg-dot" style="background:#4af"></div>COPS</div>
+    <div class="mleg"><div class="mleg-dot" style="background:#f44"></div>GANG</div>
+    <div class="mleg"><div class="mleg-dot" style="background:#4f4"></div>CIVILIANS</div>
+    <div class="mleg"><div class="mleg-sq" style="background:#0a3a0a;border:1px solid #0f0"></div>HOSPITAL</div>
+    <div class="mleg"><div class="mleg-sq" style="background:#3a0a0a;border:1px solid #f44"></div>GANG TURF</div>
+    <div class="mleg"><div class="mleg-sq" style="background:#0a0a3a;border:1px solid #44f"></div>COP HQ</div>
+    <div class="mleg"><div class="mleg-sq" style="background:#3a1800;border:1px solid #f80"></div>SHOP</div>
+    <div class="mleg"><div class="mleg-sq" style="background:#555"></div>ROAD</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     CONTROLS
+     ═══════════════════════════ -->
+<div id="ctrl">
+  <div id="jz"><div id="jb"></div><div id="jk"></div></div>
+  <div id="ab">
+    <div class="br">
+      <!-- SWAP — two arrows icon -->
+      <div class="btn" id="bSw" title="Swap weapon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Swap">
+          <path d="M7 16l-4-4 4-4"/><path d="M3 12h14"/><path d="M17 8l4 4-4 4"/><path d="M21 12H7"/>
+        </svg>
+      </div>
+      <!-- SHOP — cart icon -->
+      <div class="btn" id="bSh" title="Open shop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Shop">
+          <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+        </svg>
+      </div>
+      <!-- CAR — steering wheel icon -->
+      <div class="btn" id="bE" title="Enter/Exit car">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#99f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Car">
+          <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/>
+          <path d="M12 3v4M3.5 8.5l3.5 2M20.5 8.5l-3.5 2M3.5 15.5l3.5-2M20.5 15.5l-3.5-2M12 17v4"/>
+        </svg>
+      </div>
+    </div>
+    <div class="br">
+      <!-- RUN — lightning bolt icon -->
+      <div class="btn" id="bS" title="Sprint">
+        <svg viewBox="0 0 24 24" fill="var(--green)" stroke="none" aria-label="Sprint">
+          <path d="M13 2L4.5 13.5H11L10 22l9-13h-6.5z"/>
+        </svg>
+      </div>
+      <!-- ATTACK — fist icon -->
+      <div class="btn" id="bA" title="Attack">
+        <svg viewBox="0 0 24 24" fill="white" stroke="none" aria-label="Attack">
+          <rect x="7" y="9" width="10" height="8" rx="2"/>
+          <rect x="9" y="5" width="2.5" height="5" rx="1.2"/>
+          <rect x="12" y="4" width="2.5" height="6" rx="1.2"/>
+          <rect x="15" y="6" width="2" height="4" rx="1"/>
+          <rect x="5" y="10" width="3" height="5" rx="1.5"/>
+        </svg>
+      </div>
+    </div>
+  </div><!-- /ab -->
+</div><!-- /ctrl -->
+
+<!-- ═══════════════════════════
+     SHOP
+     ═══════════════════════════ -->
+<div id="shopOverlay">
+  <div id="shopHeader">
+    <div id="shopTitle">
+      <!-- Store icon -->
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l1-5h16l1 5"/><rect x="2" y="9" width="20" height="13" rx="1"/>
+        <path d="M9 22V12h6v10"/>
+      </svg>
+      AMMU-SHOP
+    </div>
+    <div id="shopMoney">$0</div>
+    <button id="shopCloseBtn">
+      <!-- X icon -->
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+      CLOSE
+    </button>
+  </div>
+  <div id="shopBody">
+
+    <!-- Medical -->
+    <div class="sSection">
+      <div class="sSec">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="var(--red)"><rect x="6" y="2" width="4" height="12" rx="1"/><rect x="2" y="6" width="12" height="4" rx="1"/></svg>
+        MEDICAL
+      </div>
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round"><rect x="8" y="2" width="8" height="20" rx="2"/><rect x="2" y="8" width="20" height="8" rx="2"/></svg></div>
+        <div class="sInf"><div class="sNm">Med Kit</div><div class="sDsc">+50 HP instantly</div></div>
+        <span class="sPr">$150</span>
+        <button class="sBuy" onclick="shopBuy('medkit',150)">BUY</button>
+      </div>
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="#6af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-5.5-8-12a8 8 0 0 1 16 0c0 6.5-8 12-8 12z"/></svg></div>
+        <div class="sInf"><div class="sNm">Body Armor</div><div class="sDsc">Max HP → 150</div></div>
+        <span class="sPr">$400</span>
+        <button class="sBuy" onclick="shopBuy('armor',400)">BUY</button>
+      </div>
+    </div>
+
+    <!-- Weapons -->
+    <div class="sSection">
+      <div class="sSec">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="var(--gold)"><rect x="2" y="6" width="10" height="4" rx="1"/><rect x="10" y="4" width="4" height="3" rx="1"/><rect x="3" y="10" width="2" height="3" rx="1"/></svg>
+        WEAPONS
+      </div>
+      <!-- Pistol -->
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round"><rect x="3" y="9" width="14" height="6" rx="1"/><rect x="14" y="6" width="5" height="4" rx="1"/><rect x="5" y="15" width="3" height="4" rx="1"/></svg></div>
+        <div class="sInf"><div class="sNm">Pistol</div><div class="sDsc">DMG:13 Fast • 30 ammo</div></div>
+        <span class="sPr">$200</span>
+        <button class="sBuy" onclick="shopBuy('pistol',200)">BUY</button>
+      </div>
+      <!-- Shotgun -->
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round"><rect x="2" y="10" width="18" height="4" rx="1"/><rect x="18" y="8" width="4" height="3" rx="1"/><rect x="4" y="14" width="2" height="4" rx="1"/></svg></div>
+        <div class="sInf"><div class="sNm">Shotgun</div><div class="sDsc">DMG:8×5 pellets=40 burst • 15 ammo</div></div>
+        <span class="sPr">$500</span>
+        <button class="sBuy" onclick="shopBuy('shotgun',500)">BUY</button>
+      </div>
+      <!-- Uzi -->
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="var(--gold)" stroke="none"><rect x="2" y="9" width="12" height="5" rx="1"/><rect x="12" y="7" width="4" height="3" rx="1"/><rect x="3" y="14" width="2" height="5" rx="1"/><rect x="6" y="14" width="2" height="3" rx="1"/></svg></div>
+        <div class="sInf"><div class="sNm">Uzi</div><div class="sDsc">DMG:8 V.Fast • 60 ammo</div></div>
+        <span class="sPr">$700</span>
+        <button class="sBuy" onclick="shopBuy('uzi',700)">BUY</button>
+      </div>
+      <!-- Sniper -->
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round"><rect x="1" y="10" width="20" height="4" rx="1"/><rect x="19" y="8" width="4" height="3" rx="1"/><circle cx="7" cy="12" r="3"/><line x1="7" y1="9" x2="7" y2="7"/><line x1="7" y1="15" x2="7" y2="17"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="10" y1="12" x2="12" y2="12"/></svg></div>
+        <div class="sInf"><div class="sNm">Sniper</div><div class="sDsc">DMG:80 V.Slow • 10 ammo</div></div>
+        <span class="sPr">$1200</span>
+        <button class="sBuy" onclick="shopBuy('sniper',1200)">BUY</button>
+      </div>
+      <!-- RPG -->
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round"><rect x="2" y="11" width="14" height="3" rx="1"/><path d="M16 9l4 3-4 3"/><path d="M5 11V8l-3 3 3 3v-3"/></svg></div>
+        <div class="sInf"><div class="sNm">RPG</div><div class="sDsc">DMG:120 Splash • 5 ammo</div></div>
+        <span class="sPr">$2500</span>
+        <button class="sBuy" onclick="shopBuy('rocket',2500)">BUY</button>
+      </div>
+      <!-- Ammo Refill -->
+      <div class="sItem">
+        <div class="sIco"><svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg></div>
+        <div class="sInf"><div class="sNm">Ammo Refill</div><div class="sDsc">Fill all owned guns</div></div>
+        <span class="sPr">$300</span>
+        <button class="sBuy" onclick="shopBuy('ammo',300)">BUY</button>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="sSection">
+      <div class="sSec">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".5" fill="rgba(255,255,255,.35)"/></svg>
+        LEGEND
+      </div>
+      <div class="sItem" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#666;letter-spacing:1px;">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="#f80" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l1-5h8l1 5"/><rect x="2" y="9" width="12" height="7" rx="1"/><path d="M5 16v-4h6v4"/></svg>
+          <span><span style="color:#f80">SHOP</span> — Buy weapons</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#666;letter-spacing:1px;">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="#0f0" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="2" width="8" height="12" rx="1"/><rect x="6" y="5" width="4" height="4" rx="1"/><path d="M7 2V1M9 2V1"/></svg>
+          <span><span style="color:#0f0">HOSPITAL</span> — Free healing</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#666;letter-spacing:1px;">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="#f44" stroke="none"><path d="M8 2a6 6 0 0 0-6 6c0 4 6 8 6 8s6-4 6-8a6 6 0 0 0-6-6z" opacity=".3"/><text x="4" y="12" font-size="9" fill="#f44">☠</text></svg>
+          <span><span style="color:#f44">GANG TURF</span> — Danger zone</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#666;letter-spacing:1px;">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="#44f" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="7" width="14" height="7" rx="1"/><rect x="3" y="4" width="10" height="4" rx="1"/><circle cx="4" cy="14" r="1" fill="#44f" stroke="none"/><circle cx="12" cy="14" r="1" fill="#44f" stroke="none"/></svg>
+          <span><span style="color:#44f">COP HQ</span> — High alert</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#666;letter-spacing:1px;">
+          <svg viewBox="0 0 60 12" width="46" height="9">
+            <path d="M5 2l2 8H1L5 2z" fill="var(--gold)"/>
+            <path d="M17 2l2 8H13l2-8z" fill="var(--gold)"/>
+            <path d="M29 2l2 8H25l2-8z" fill="var(--gold)"/>
+            <path d="M41 2l2 8H37l2-8z" fill="var(--gold)" opacity=".3"/>
+            <path d="M53 2l2 8H49l2-8z" fill="var(--gold)" opacity=".3"/>
+          </svg>
+          <span>Max <span style="color:var(--gold)">5 wanted</span> stars</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /shopBody -->
+</div><!-- /shopOverlay -->
+
+<!-- ═══════════════════════════
+     START SCREEN
+     ═══════════════════════════ -->
+<div id="startScreen">
+  <h1>STREET<br>CRIME</h1>
+  <div class="sub">Open World Mayhem</div>
+  <button id="startBtn">PLAY NOW</button>
+  <div class="inst">
+    Joystick — Move &amp; Steer
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="white" style="vertical-align:middle;margin:0 2px" aria-hidden="true"><path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM7 9V7H5l3-4 3 4H9v2z"/></svg>
+    Run<br>
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="white" style="vertical-align:middle;margin:0 2px" aria-hidden="true"><rect x="3" y="6" width="8" height="5" rx="1"/><rect x="8" y="4" width="3" height="3" rx="1"/><rect x="4" y="11" width="2" height="3" rx="1"/></svg>
+    Attack &nbsp;|&nbsp;
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="white" stroke-width="1.5" style="vertical-align:middle;margin:0 2px" aria-hidden="true"><rect x="1" y="4" width="9" height="8" rx="1"/><circle cx="12" cy="8" r="3.5"/></svg>
+    Jack Car<br>
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="white" stroke-width="1.5" style="vertical-align:middle;margin:0 2px" aria-hidden="true"><path d="M3 9l1-5h8l1 5"/><rect x="2" y="9" width="12" height="6" rx="1"/></svg>
+    Shop &nbsp;|&nbsp; SWAP — Switch Weapon
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     GAME OVER
+     ═══════════════════════════ -->
+<div id="goScreen">
+  <h2>WASTED</h2>
+  <div id="goScore"></div>
+  <button id="reBtn">PLAY AGAIN</button>
+</div>
+
+</div><!-- /gc -->
+
+<!-- ═══════════════════════════════════════════════════════
+     SCRIPT LOADING ORDER (do not change order)
+     ═══════════════════════════════════════════════════════ -->
+
+<!-- 1. World: map, zones, entities, constants, cop grades -->
+<script src="world.js"></script>
+
+<!-- 2. Assets: sprites, tile textures, car draw helpers -->
+<script src="assets.js"></script>
+
+<!-- 3. Game: input, shop, HUD, AI, physics, render, loop -->
+<script src="game.js"></script>
+
+<!-- ── EXPANSION MODULES ─────────────────────────────────
+     Uncomment to activate. Each module is self-contained.
+     See the file header for integration instructions.
+     ──────────────────────────────────────────────────── -->
+
+<!-- <script src="island_a.js"></script> -->   <!-- Missions system  -->
+<!-- <script src="island_b.js"></script> -->   <!-- Events & Weather -->
+
+</body>
+</html>
