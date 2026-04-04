@@ -150,7 +150,8 @@ const npcs=[],gangs=[],cops=[];
 let gangSpawnT=0,copSpawnT=0,gangKills=0;
 // Margin (tiles) to keep all spawns away from map edges and prevent out-of-bounds placement
 const MAP_EDGE_MARGIN=2;
-
+npc.state = "idle";
+npc.timer = 0;
 function spawnNPCs(){
   for(let i=0;i<40;i++){
     let tx,ty;do{tx=MAP_EDGE_MARGIN+Math.floor(Math.random()*(WW-MAP_EDGE_MARGIN*2));ty=MAP_EDGE_MARGIN+Math.floor(Math.random()*(WH-MAP_EDGE_MARGIN*2));}while(!isW(tx,ty)||WD[ty][tx]===1||WD[ty][tx]>=6);
