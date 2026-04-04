@@ -1170,6 +1170,63 @@ function render(){
   MC.restore();
 }
 
+//--------------------------------------------------
+//Npc reactions
+//--------------------------------------------------
+function updateNPCReactions(npc, player) {
+  const dx = player.x - npc.x;
+  const dy = player.y - npc.y;
+  const dist = Math.hypot(dx, dy);
+
+  if (npc.timer > 0) npc.timer--;
+
+  if (npc.type === "police") {
+    if (player.wantedLevel > 0 && dist < 200) {
+      npc.state = "chasing";
+    } else {
+      npc.state = "idle";
+    }
+  }
+
+  else if (npc.type === "civilian") {
+    if (player.hasGun && dist < 120) {
+      npc.state = "scared";
+      npc.timer = 60;
+    } else if (npc.state === "scared" && npc.timer <= 0) {
+      npc.state = "idle";
+    }
+  }
+
+  else if (npc.type === "gangster") {
+    if (dist < 150) {
+      npc.state = "angry";
+    }
+  }
+}
+
+function applyNPCMovement(npc, player) {
+  const dx = player.x - npc.x;
+  const dy = player.y - npc.y;
+  const dist = Math.hypot(dx, dy) || 1;
+
+  const speed = 1.2;
+
+  if (npc.state === "fleeing" || npc.state === "scared") {
+    npc.x -= (dx / dist) * speed;
+    npc.y -= (dy / dist) * speed;
+  }
+
+  if (npc.state === "chasing") {
+    npc.x += (dx / dist) * speed;
+    npc.y += (dy / dist) * speed;
+  }
+
+  if (npc.state === "angry") {
+    npc.x += (dx / dist) * (speed * 0.6);
+    npc.y += (dy / dist) * (speed * 0.6);
+  }
+}
+
 // ══════════════════════════════════════════
 //  LOOP
 // ══════════════════════════════════════════
